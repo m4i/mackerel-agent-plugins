@@ -34,36 +34,6 @@ var graphdef = map[string]mp.Graphs{
 			{Name: "rss", Label: "RSS", Diff: false, Stacked: true},
 		},
 	},
-	"docker.blkio.io_queued.#": {
-		Label: "Docker BlkIO Queued",
-		Unit:  "integer",
-		Metrics: []mp.Metrics{
-			{Name: "read", Label: "Read", Diff: false, Stacked: true},
-			{Name: "write", Label: "Write", Diff: false, Stacked: true},
-			{Name: "sync", Label: "Sync", Diff: false, Stacked: true},
-			{Name: "async", Label: "Async", Diff: false, Stacked: true},
-		},
-	},
-	"docker.blkio.io_serviced.#": {
-		Label: "Docker BlkIO IOPS",
-		Unit:  "integer",
-		Metrics: []mp.Metrics{
-			{Name: "read", Label: "Read", Diff: true, Stacked: true, Type: "uint64"},
-			{Name: "write", Label: "Write", Diff: true, Stacked: true, Type: "uint64"},
-			{Name: "sync", Label: "Sync", Diff: true, Stacked: true, Type: "uint64"},
-			{Name: "async", Label: "Async", Diff: true, Stacked: true, Type: "uint64"},
-		},
-	},
-	"docker.blkio.io_service_bytes.#": {
-		Label: "Docker BlkIO Bytes",
-		Unit:  "integer",
-		Metrics: []mp.Metrics{
-			{Name: "read", Label: "Read", Diff: true, Stacked: true, Type: "uint64"},
-			{Name: "write", Label: "Write", Diff: true, Stacked: true, Type: "uint64"},
-			{Name: "sync", Label: "Sync", Diff: true, Stacked: true, Type: "uint64"},
-			{Name: "async", Label: "Async", Diff: true, Stacked: true, Type: "uint64"},
-		},
-	},
 }
 
 // DockerPlugin mackerel plugin for docker
@@ -329,24 +299,6 @@ func (m DockerPlugin) parseStats(stats *map[string]interface{}, name string, res
 	(*stats)["docker.cpuacct."+name+".system"] = (*result).CPUStats.CPUUsage.UsageInKernelmode
 	(*stats)["docker.memory."+name+".cache"] = (*result).MemoryStats.Stats.TotalCache
 	(*stats)["docker.memory."+name+".rss"] = (*result).MemoryStats.Stats.TotalRss
-	fields := []string{"read", "write", "sync", "async"}
-	for _, field := range fields {
-		for _, s := range (*result).BlkioStats.IOQueueRecursive {
-			if s.Op == strings.Title(field) {
-				(*stats)["docker.blkio.io_queued."+name+"."+field] = s.Value
-			}
-		}
-		for _, s := range (*result).BlkioStats.IOServicedRecursive {
-			if s.Op == strings.Title(field) {
-				(*stats)["docker.blkio.io_serviced."+name+"."+field] = s.Value
-			}
-		}
-		for _, s := range (*result).BlkioStats.IOServiceBytesRecursive {
-			if s.Op == strings.Title(field) {
-				(*stats)["docker.blkio.io_service_bytes."+name+"."+field] = s.Value
-			}
-		}
-	}
 	return nil
 }
 
@@ -377,30 +329,6 @@ func (m DockerPlugin) FetchMetricsWithFile(dockerStats *map[string][]string) (ma
 				}
 			}
 		}
-
-		// blkio statistics
-		for _, blkioType := range []string{"io_queued", "io_serviced", "io_service_bytes"} {
-			if ok, err := exists(pb.build(id, "blkio", blkioType)); !ok || err != nil {
-				continue
-			}
-			data, err := getFile(pb.build(id, "blkio", blkioType))
-			if err != nil {
-				return nil, err
-			}
-			for _, stat := range []string{"Read", "Write", "Sync", "Async"} {
-				re := regexp.MustCompile(stat + " (\\d+)")
-				matchs := re.FindAllStringSubmatch(data, -1)
-				v := 0.0
-				for _, m := range matchs {
-					if m != nil {
-						ret, _ := strconv.ParseFloat(m[1], 64)
-						v += ret
-					}
-				}
-				res[fmt.Sprintf("docker.blkio.%s.%s_%s.%s", blkioType, normalizeMetricName(name[0]), id[0:6], strings.ToLower(stat))] = v
-			}
-		}
-
 	}
 
 	return res, nil
